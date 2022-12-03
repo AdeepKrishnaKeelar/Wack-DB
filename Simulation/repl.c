@@ -18,6 +18,21 @@
     The OS Interface is the layer that differs depending on the OS SQLite is compiled.
     
     Task 1 -- Making a simple read execute print loop on the command line.
+
+
+    As mentioned before, the front end of SQLite is a SQL Compiler that parses a string and outputs
+    an internal representation called byte code.
+
+    SQLIte Architecture looks like as follows ----
+
+    Core                                                                Backend
+    1. Interface -> SQL Command Processor -> Virtual Machine ---> B-Tree -> Pager -> OS Interface
+                        /       I    
+                       /        I
+                      /         I
+                     /          I
+    SQL Compiler                I                                       Accesories
+    Tokenizer -> Parser -> Code Generator                   Utilites, Test Code
     
     */
 
@@ -29,8 +44,30 @@
     typedef struct {
         char *buffer;
         size_t buffer_length;
-        size_t input_length;
+        ssize_t input_length;
     } InputBuffer;
+
+
+    /* New functions return enums indicating success or failure. */
+    typedef enum {
+        META_COMMAND_SUCCESS,
+        META_COMMAND_UNRECOGNISED_COMMAND
+    } MetaCommndResult;
+
+    typedef enum {
+        PREPARE_SUCCESS,
+        PREPARE_UNRECOGNISED_STATEMENT
+    } PrepareResult;
+
+    /* Only two statements at the moment */
+    typedef enum {
+        STATEMENT_INSERT,
+        STATEMENT_SELECT
+    } StatementType;
+
+    typedef struct {
+        StatementType type;
+    } Statement;
 
     /* InputBuffer is a small wrapper around the state we need to store to interact
     with getline() */
@@ -41,6 +78,40 @@
         input_buffer->input_length=0;
 
         return input_buffer;
+    }
+
+    /* The do_meta_command is a wrapper for exisiting functionality that leaves room for more commands.*/
+    MetaCommndResult do_meta_command(InputBuffer* input_buffer) {
+        if(strcmp(input_buffer->buffer,".exit")==0) {
+            close_input_buffer(input_buffer);
+            exit(EXIT_SUCCESS);
+        } else {
+            return META_COMMAND_UNRECOGNISED_COMMAND;
+        }
+    }
+
+    /* IMPORTANT - SQLCompiler uderstanding only two words at the moment. */
+    PrepareResult prepare_statement(InputBuffer* input_buffer, Statement* statement) {
+        if(strncmp(input_buffer->buffer,"insert",6)==0) {
+            statement->type = STATEMENT_INSERT;
+            return PREPARE_SUCCESS;
+        }
+        if(strcmp(input_buffer->buffer,"select")==0) {
+            statement->type=STATEMENT_SELECT;
+            return PREPARE_SUCCESS;
+        }
+        return PREPARE_UNRECOGNISED_STATEMENT;
+    }
+
+    void execute_statement(Statement* statement) {
+        switch(statement->type) {
+            case (STATEMENT_INSERT):    
+                printf("This is where we do an insert.\n");
+                break;
+            case (STATEMENT_SELECT):
+                printf("This is where we do a select.\n");
+                break;
+        }
     }
 
     void print_prompt() {
@@ -76,12 +147,33 @@
             print_prompt();
             read_input(input_buffer);
 
-            if(strcmp(input_buffer->buffer,".exit")==0) {
+          /*  if(strcmp(input_buffer->buffer,".exit")==0) {
                 close_input_buffer(input_buffer);
                 exit(EXIT_SUCCESS);
             } else {
                 printf("Unrecognised command '%s'.\n",input_buffer->buffer);
+            } */
+            if(input_buffer->buffer[0]=='.') {
+                switch(do_meta_command(input_buffer)) {
+                    case (META_COMMAND_SUCCESS):
+                        continue;
+                    case (META_COMMAND_UNRECOGNISED_COMMAND):
+                        printf("Unrecognised command '%s'\n.",input_buffer->buffer);
+                        continue;
+                }
             }
+
+            Statement statement;
+            switch(prepare_statement(input_buffer,&statement)) {
+                case (PREPARE_SUCCESS):
+                    break;
+                case (PREPARE_UNRECOGNISED_STATEMENT):
+                    printf("Unrecognised keyword at start of '%s'.\n",input_buffer->buffer);
+                    continue;
+            }
+
+            execute_statement(&statement);
+            printf("Executed.\n");
         }
         return EXIT_SUCCESS;
     }
